@@ -100,32 +100,42 @@ void displayDayText() {
   }
 }
 
-byte bcdToDecimal(byte val) {
-  return (second >> 4) * 10 + (second & 0x0F);
+inline byte bcdToDecimal(byte value) {
+  return (value >> 4) * 10 + (value & 0x0F);
+}
+inline byte decimalToBcd(byte value) {
+   return ((value / 10) << 4) + (value % 10);
+}
+
+
+char onesDigit(byte val) {
+  return val % 10 + 48;
+}
+char tensDigit(byte val) {
+  return val / 10 + 48;
 }
 
 void DS3231_display() {
   // Convert BCD to decimal
-  second = (second >> 4) * 10 + (second & 0x0F);
-  minute = (minute >> 4) * 10 + (minute & 0x0F);
-  hour   = (hour >> 4)   * 10 + (hour & 0x0F);
-  date   = (date >> 4)   * 10 + (date & 0x0F);
-  month  = (month >> 4)  * 10 + (month & 0x0F);
-  year   = (year >> 4)   * 10 + (year & 0x0F);
-  // End conversion
+  second = bcdToDecimal(second);
+  minute = bcdToDecimal(minute);
+  hour   = bcdToDecimal(hour);
+  date   = bcdToDecimal(date);
+  month  = bcdToDecimal(month);
+  year   = bcdToDecimal(year);
 
-  Time[7]     = second % 10 + 48;
-  Time[6]     = second / 10 + 48;
-  Time[4]     = minute % 10 + 48;
-  Time[3]     = minute / 10 + 48;
-  Time[1]     = hour   % 10 + 48;
-  Time[0]     = hour   / 10 + 48;
-  Calendar[9] = year   % 10 + 48;
-  Calendar[8] = year   / 10 + 48;
-  Calendar[4] = month  % 10 + 48;
-  Calendar[3] = month  / 10 + 48;
-  Calendar[1] = date   % 10 + 48;
-  Calendar[0] = date   / 10 + 48;
+  Time[7]     = onesDigit(second);
+  Time[6]     = tensDigit(second);
+  Time[4]     = onesDigit(minute);
+  Time[3]     = tensDigit(minute);
+  Time[1]     = onesDigit(hour);
+  Time[0]     = tensDigit(hour);
+  Calendar[9] = onesDigit(year);
+  Calendar[8] = tensDigit(year);
+  Calendar[4] = onesDigit(month);
+  Calendar[3] = tensDigit(month);
+  Calendar[1] = onesDigit(date);
+  Calendar[0] = tensDigit(date);
   if (temperature_msb < 0) {
     temperature_msb = abs(temperature_msb);
     temperature[0] = '-';
@@ -133,8 +143,8 @@ void DS3231_display() {
   else
     temperature[0] = ' ';
   temperature_lsb >>= 6;
-  temperature[2] = temperature_msb % 10  + 48;
-  temperature[1] = temperature_msb / 10  + 48;
+  temperature[2] = onesDigit(temperature_msb);
+  temperature[1] = tensDigit(temperature_msb);
   if (temperature_lsb == 0 || temperature_lsb == 2) {
     temperature[5] = '0';
     if (temperature_lsb == 0) temperature[4] = '0';
@@ -269,11 +279,11 @@ void loop() {
     minute = edit(50, 9, minute);                   // Edit minutes
 
     // Convert decimal to BCD
-    minute = ((minute / 10) << 4) + (minute % 10);
-    hour = ((hour / 10)  << 4) + (hour % 10);
-    date = ((date / 10) <<  4) + (date % 10);
-    month = ((month / 10)  << 4) + (month % 10);
-    year = ((year / 10)  << 4) + (year % 10);
+    minute = decimalToBcd(minute);
+    hour = decimalToBcd(hour);
+    date = decimalToBcd(date);
+    month = decimalToBcd(month);
+    year = decimalToBcd(year);
     // End conversion
 
     updateClockWithTimeAndDate();
