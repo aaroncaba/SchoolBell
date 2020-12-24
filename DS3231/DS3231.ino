@@ -7,8 +7,8 @@
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     4 // Reset pin
-TwoWire twi = TwoWire(); // create our own TwoWire instance
 #define CLK_DURING 800000UL // Speed (in Hz) for Wire transmissions in SSD1306 library calls
+TwoWire twi = TwoWire(); // create our own TwoWire instance
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &twi, OLED_RESET, CLK_DURING); 
 
 #define DS3231_ADDR  0x68      // DS3231 clock I2C address
@@ -17,6 +17,39 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &twi, OLED_RESET, CLK_DURI
 #define button1    9                       // Button B1 is connected to Arduino pin 9
 #define button2    8                       // Button B2 is connected to Arduino pin 8
 #define buzzer     3
+
+char Time[]     = "  :  :  ";
+char Calendar[] = "  /  /20  ";
+char temperature[] = " 00.00";
+char temperature_msb;
+byte i, second, minute, hour, day, date, month, year, temperature_lsb;
+
+// A time/day pair for an alarm
+struct AlarmTime {
+  char *time;
+  byte days;
+};
+
+// Bitmask for days of the week
+enum Days {
+  SUNDAY = (1u << 0),
+  MONDAY = (1u << 1),
+  TUESDAY = (1u << 2),
+  WEDNESDAY = (1u << 3),
+  THURSDAY = (1u << 4),
+  FRIDAY = (1u << 5),
+  SATURDAY = (1u << 6)
+};
+
+// Store the times to alarm:  "HH:MM:SS", <day1 + day2 ...>
+const byte alarmCount = 5;
+const AlarmTime alarmTimes[alarmCount] = {
+  {"07:55:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+  {"09:00:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+  {"12:25:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+  {"13:30:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+  {"14:00:00", WEDNESDAY}
+};
 
 void setup(void) {
   pinMode(button1, INPUT_PULLUP);
@@ -40,35 +73,22 @@ void setup(void) {
   draw_text(122, 55, "C", 1);
 }
 
-char Time[]     = "  :  :  ";
-char Calendar[] = "  /  /20  ";
-char temperature[] = " 00.00";
-char temperature_msb;
-byte i, second, minute, hour, day, date, month, year, temperature_lsb;
 
-const byte alarmCount = 4;
-const char *alarmTime[alarmCount] = {
-  "07:55:00",
-  "09:00:00",
-  "12:25:00",
-  "13:30:00"
-};
-
-bool checkTime() {
+// True when within the alarm period
+// Currently alarms for 10 seconds
+bool timeToAlarm() {
   for (int i = 0; i < alarmCount; i++ ) {
-    if (Time[0] == alarmTime[i][0] && Time[1] == alarmTime[i][1] && Time[3] == alarmTime[i][3] && Time[4] == alarmTime[i][4] && Time[6] == alarmTime[i][6])
-      return true;
+    if (Time[0] == alarmTimes[i].time[0] && Time[1] == alarmTimes[i].time[1] && 
+        Time[3] == alarmTimes[i].time[3] && Time[4] == alarmTimes[i].time[4] && 
+        Time[6] == alarmTimes[i].time[6] && ( (1u << day) & alarmTimes[i].days ) ) {
+          return true;
+    }
   }
   return false;
 }
 
-bool checkDay() {
-  if (day == 2 || day == 3 || day == 5 || day == 6)
-    return true;
-  return false;
-}
 
-void display_day() {
+void displayDayText() {
   switch (day) {
     case 1:  draw_text(0, 0, " SUNDAY  ", 1); break;
     case 2:  draw_text(0, 0, " MONDAY  ", 1); break;
@@ -78,6 +98,10 @@ void display_day() {
     case 6:  draw_text(0, 0, " FRIDAY  ", 1); break;
     default: draw_text(0, 0, "SATURDAY ", 1);
   }
+}
+
+byte bcdToDecimal(byte val) {
+  return (second >> 4) * 10 + (second & 0x0F);
 }
 
 void DS3231_display() {
@@ -126,12 +150,13 @@ void DS3231_display() {
   draw_text(10, 24, Time, 2);                         // Display the time
   draw_text(75, 55, temperature, 1);                  // Display the temperature
 
-  if (checkTime() && checkDay())
-  {
+}
+
+void soundAlarm() {
+  if (timeToAlarm())  {
     digitalWrite(buzzer, LOW);
   }
-  else
-  {
+  else {
     digitalWrite(buzzer, HIGH);
   }
 }
@@ -183,6 +208,40 @@ void draw_text(byte x_pos, byte y_pos, char *text, byte text_size) {
   display.display();
 }
 
+void readFromClock() {
+  Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
+  Wire.write(0);                                // Send register address
+  Wire.endTransmission(false);                  // I2C restart
+  Wire.requestFrom(DS3231_ADDR, 7);                    // Request 7 bytes from DS3231 and release I2C bus at end of reading
+  second = Wire.read();                         // Read seconds from register 0
+  minute = Wire.read();                         // Read minuts from register 1
+  hour   = Wire.read();                         // Read hour from register 2
+  day    = Wire.read();                         // Read day from register 3
+  date   = Wire.read();                         // Read date from register 4
+  month  = Wire.read();                         // Read month from register 5
+  year   = Wire.read();                         // Read year from register 6
+  Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
+  Wire.write(0x11);                             // Send register address
+  Wire.endTransmission(false);                  // I2C restart
+  Wire.requestFrom(DS3231_ADDR, 2);                    // Request 2 bytes from DS3231 and release I2C bus at end of reading
+  temperature_msb = Wire.read();                // Read temperature MSB
+  temperature_lsb = Wire.read();                // Read temperature LSB
+}
+
+void updateClockWithTimeAndDate() {
+  // Write data to DS3231 RTC
+  Wire.beginTransmission(DS3231_ADDR);               // Start I2C protocol with DS3231 address
+  Wire.write(0);                              // Send register address
+  Wire.write(0);                              // Reset sesonds and start oscillator
+  Wire.write(minute);                         // Write minute
+  Wire.write(hour);                           // Write hour
+  Wire.write(day);                            // Write day
+  Wire.write(date);                           // Write date
+  Wire.write(month);                          // Write month
+  Wire.write(year);                           // Write year
+  Wire.endTransmission();                     // Stop transmission and release the I2C bus
+}
+
 void loop() {
 
   if (!digitalRead(button1)) {                       // If button B1 is pressed
@@ -192,12 +251,12 @@ void loop() {
       while (!digitalRead(button2)) {                // While button B2 pressed
         day++;                                       // Increment day
         if (day > 7) day = 1;
-        display_day();                               // Call display_day function
+        displayDayText();                               // Call display_day function
         delay(200);                                  // Wait 200 ms
       }
       draw_text(0, 0, "         ", 1);
       blink_parameter();                             // Call blink_parameter function
-      display_day();                                 // Call display_day function
+      displayDayText();                                 // Call display_day function
       blink_parameter();                             // Call blink_parameter function
       if (!digitalRead(button1))                     // If button B1 is pressed
         break;
@@ -217,40 +276,13 @@ void loop() {
     year = ((year / 10)  << 4) + (year % 10);
     // End conversion
 
-    // Write data to DS3231 RTC
-    Wire.beginTransmission(DS3231_ADDR);               // Start I2C protocol with DS3231 address
-    Wire.write(0);                              // Send register address
-    Wire.write(0);                              // Reset sesonds and start oscillator
-    Wire.write(minute);                         // Write minute
-    Wire.write(hour);                           // Write hour
-    Wire.write(day);                            // Write day
-    Wire.write(date);                           // Write date
-    Wire.write(month);                          // Write month
-    Wire.write(year);                           // Write year
-    Wire.endTransmission();                     // Stop transmission and release the I2C bus
+    updateClockWithTimeAndDate();
     delay(200);                                 // Wait 200ms
   }
 
-  Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
-  Wire.write(0);                                // Send register address
-  Wire.endTransmission(false);                  // I2C restart
-  Wire.requestFrom(DS3231_ADDR, 7);                    // Request 7 bytes from DS3231 and release I2C bus at end of reading
-  second = Wire.read();                         // Read seconds from register 0
-  minute = Wire.read();                         // Read minuts from register 1
-  hour   = Wire.read();                         // Read hour from register 2
-  day    = Wire.read();                         // Read day from register 3
-  date   = Wire.read();                         // Read date from register 4
-  month  = Wire.read();                         // Read month from register 5
-  year   = Wire.read();                         // Read year from register 6
-  Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
-  Wire.write(0x11);                             // Send register address
-  Wire.endTransmission(false);                  // I2C restart
-  Wire.requestFrom(DS3231_ADDR, 2);                    // Request 2 bytes from DS3231 and release I2C bus at end of reading
-  temperature_msb = Wire.read();                // Read temperature MSB
-  temperature_lsb = Wire.read();                // Read temperature LSB
-
-  display_day();
-  DS3231_display();                             // Diaplay time & calendar
-
+  readFromClock();                                 // read date and time
+  displayDayText();
+  DS3231_display();                             // Display time & calendar
+  soundAlarm();
   delay(50);                                    // Wait 50ms
 }
