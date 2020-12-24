@@ -27,29 +27,29 @@ byte i, second, minute, hour, day, date, month, year, temperature_lsb;
 // A time/day pair for an alarm
 struct AlarmTime {
   char *time;
-  byte days;
+  byte daysMask;
 };
 
 // Bitmask for days of the week
 enum Days {
-  SUNDAY = (1u << 0),
-  MONDAY = (1u << 1),
-  TUESDAY = (1u << 2),
-  WEDNESDAY = (1u << 3),
-  THURSDAY = (1u << 4),
-  FRIDAY = (1u << 5),
-  SATURDAY = (1u << 6)
+  SUNDAY    = (1u << 1),
+  MONDAY    = (1u << 2),
+  TUESDAY   = (1u << 3),
+  WEDNESDAY = (1u << 4),
+  THURSDAY  = (1u << 5),
+  FRIDAY    = (1u << 6),
+  SATURDAY  = (1u << 7)
 };
 
 // Store the times to alarm:  "HH:MM:SS", <day1 + day2 ...>
-const byte alarmCount = 5;
-const AlarmTime alarmTimes[alarmCount] = {
+const AlarmTime alarmTimes[] = {
   {"07:55:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
   {"09:00:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
   {"12:25:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
   {"13:30:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
   {"14:00:00", WEDNESDAY}
 };
+const byte alarmCount = sizeof(alarmTimes) / sizeof(*alarmTimes);
 
 void setup(void) {
   pinMode(button1, INPUT_PULLUP);
@@ -80,7 +80,7 @@ bool timeToAlarm() {
   for (int i = 0; i < alarmCount; i++ ) {
     if (Time[0] == alarmTimes[i].time[0] && Time[1] == alarmTimes[i].time[1] && 
         Time[3] == alarmTimes[i].time[3] && Time[4] == alarmTimes[i].time[4] && 
-        Time[6] == alarmTimes[i].time[6] && ( (1u << day) & alarmTimes[i].days ) ) {
+        Time[6] == alarmTimes[i].time[6] && ( (1u << day) & alarmTimes[i].daysMask ) ) {
           return true;
     }
   }
@@ -96,17 +96,17 @@ void displayDayText() {
     case 4:  draw_text(0, 0, "WEDNESDAY", 1); break;
     case 5:  draw_text(0, 0, "THURSDAY ", 1); break;
     case 6:  draw_text(0, 0, " FRIDAY  ", 1); break;
-    default: draw_text(0, 0, "SATURDAY ", 1);
+    case 7:  draw_text(0, 0, "SATURDAY ", 1); break;
+    default: draw_text(0, 0, "**ERROR**", 1);
   }
 }
 
-inline byte bcdToDecimal(byte value) {
+byte bcdToDecimal(byte value) {
   return (value >> 4) * 10 + (value & 0x0F);
 }
-inline byte decimalToBcd(byte value) {
+byte decimalToBcd(byte value) {
    return ((value / 10) << 4) + (value % 10);
 }
-
 
 char onesDigit(byte val) {
   return val % 10 + 48;
@@ -115,15 +115,24 @@ char tensDigit(byte val) {
   return val / 10 + 48;
 }
 
-void DS3231_display() {
-  // Convert BCD to decimal
+void convertTimeFromBcdToDecimal() {
   second = bcdToDecimal(second);
   minute = bcdToDecimal(minute);
   hour   = bcdToDecimal(hour);
   date   = bcdToDecimal(date);
   month  = bcdToDecimal(month);
   year   = bcdToDecimal(year);
+}
 
+void convertTimeFromDecimalToBcd(){
+    minute = decimalToBcd(minute);
+    hour = decimalToBcd(hour);
+    date = decimalToBcd(date);
+    month = decimalToBcd(month);
+    year = decimalToBcd(year);
+}
+
+void DS3231_display() {
   Time[7]     = onesDigit(second);
   Time[6]     = tensDigit(second);
   Time[4]     = onesDigit(minute);
@@ -218,7 +227,7 @@ void draw_text(byte x_pos, byte y_pos, char *text, byte text_size) {
   display.display();
 }
 
-void readFromClock() {
+void readBcdTimeFromClock() {
   Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
   Wire.write(0);                                // Send register address
   Wire.endTransmission(false);                  // I2C restart
@@ -238,7 +247,7 @@ void readFromClock() {
   temperature_lsb = Wire.read();                // Read temperature LSB
 }
 
-void updateClockWithTimeAndDate() {
+void updateClockWithBcdTime() {
   // Write data to DS3231 RTC
   Wire.beginTransmission(DS3231_ADDR);               // Start I2C protocol with DS3231 address
   Wire.write(0);                              // Send register address
@@ -278,19 +287,13 @@ void loop() {
     hour   = edit(14, 9, hour);                     // Edit hours
     minute = edit(50, 9, minute);                   // Edit minutes
 
-    // Convert decimal to BCD
-    minute = decimalToBcd(minute);
-    hour = decimalToBcd(hour);
-    date = decimalToBcd(date);
-    month = decimalToBcd(month);
-    year = decimalToBcd(year);
-    // End conversion
-
-    updateClockWithTimeAndDate();
+    convertTimeFromDecimalToBcd();
+    updateClockWithBcdTime();
     delay(200);                                 // Wait 200ms
   }
 
-  readFromClock();                                 // read date and time
+  readBcdTimeFromClock();                                 // read date and time
+  convertTimeFromBcdToDecimal();
   displayDayText();
   DS3231_display();                             // Display time & calendar
   soundAlarm();
