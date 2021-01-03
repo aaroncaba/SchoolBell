@@ -1,0 +1,7 @@
+{
+    "board": "arduino:avr:nano",
+    "configuration": "cpu=atmega328old",
+    "port": "COM5",
+    "programmer": "AVRISP mkII",
+    "sketch": "DS3231\\DS3231.ino"
+}

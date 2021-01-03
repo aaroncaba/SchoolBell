@@ -4,54 +4,56 @@
 #include <Adafruit_SSD1306.h>
 
 // Setup SSD1306 screen
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     4 // Reset pin
+#define SCREEN_WIDTH 128    // OLED display width, in pixels
+#define SCREEN_HEIGHT 64    // OLED display height, in pixels
+#define OLED_RESET 4        // Reset pin
 #define CLK_DURING 800000UL // Speed (in Hz) for Wire transmissions in SSD1306 library calls
-TwoWire twi = TwoWire(); // create our own TwoWire instance
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &twi, OLED_RESET, CLK_DURING); 
+TwoWire twi = TwoWire();    // create our own TwoWire instance
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &twi, OLED_RESET, CLK_DURING);
 
-#define DS3231_ADDR  0x68      // DS3231 clock I2C address
-#define SSD1306_ADDR 0x3C      // SSD1306 display I2C address
+#define DS3231_ADDR 0x68  // DS3231 clock I2C address
+#define SSD1306_ADDR 0x3C // SSD1306 display I2C address
 
-#define button1    9                       // Button B1 is connected to Arduino pin 9
-#define button2    8                       // Button B2 is connected to Arduino pin 8
-#define buzzer     3
+#define button1 9 // Button B1 is connected to Arduino pin 9
+#define button2 8 // Button B2 is connected to Arduino pin 8
+#define buzzer 3
 
-char Time[]     = "  :  :  ";
+char Time[] = "  :  :  ";
 char Calendar[] = "  /  /20  ";
 char temperature[] = " 00.00";
 char temperature_msb;
 byte i, second, minute, hour, day, date, month, year, temperature_lsb;
 
 // A time/day pair for an alarm
-struct AlarmTime {
+struct AlarmTime
+{
   char *time;
   byte daysMask;
 };
 
 // Bitmask for days of the week
-enum Days {
-  SUNDAY    = (1u << 1),
-  MONDAY    = (1u << 2),
-  TUESDAY   = (1u << 3),
+enum Days
+{
+  SUNDAY = (1u << 1),
+  MONDAY = (1u << 2),
+  TUESDAY = (1u << 3),
   WEDNESDAY = (1u << 4),
-  THURSDAY  = (1u << 5),
-  FRIDAY    = (1u << 6),
-  SATURDAY  = (1u << 7)
+  THURSDAY = (1u << 5),
+  FRIDAY = (1u << 6),
+  SATURDAY = (1u << 7)
 };
 
 // Store the times to alarm:  "HH:MM:SS", <day1 + day2 ...>
 const AlarmTime alarmTimes[] = {
-  {"07:55:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
-  {"09:00:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
-  {"12:25:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
-  {"13:30:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
-  {"14:00:00", WEDNESDAY}
-};
+    {"07:55:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+    {"09:00:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+    {"12:25:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+    {"13:30:00", MONDAY + TUESDAY + THURSDAY + FRIDAY},
+    {"14:00:00", WEDNESDAY}};
 const byte alarmCount = sizeof(alarmTimes) / sizeof(*alarmTimes);
 
-void setup(void) {
+void setup(void)
+{
   pinMode(button1, INPUT_PULLUP);
   pinMode(button2, INPUT_PULLUP);
   pinMode(buzzer, OUTPUT);
@@ -60,7 +62,7 @@ void setup(void) {
   Serial.begin(115200);
 
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
-  display.begin(SSD1306_SWITCHCAPVCC, SSD1306_ADDR);  // initialize with the I2C addr
+  display.begin(SSD1306_SWITCHCAPVCC, SSD1306_ADDR); // initialize with the I2C addr
   // init done
 
   // Clear the display buffer.
@@ -68,84 +70,110 @@ void setup(void) {
   display.display();
 
   display.setTextColor(WHITE, BLACK);
-  display.drawRect(117, 55, 3, 3, WHITE);     // Put degree symbol ( ° )
+  display.drawRect(117, 55, 3, 3, WHITE); // Put degree symbol ( ° )
   draw_text(0, 55, "TEMPERATURE =", 1);
   draw_text(122, 55, "C", 1);
 }
 
-
 // True when within the alarm period
 // Currently alarms for 10 seconds
-bool timeToAlarm() {
-  for (int i = 0; i < alarmCount; i++ ) {
-    if (Time[0] == alarmTimes[i].time[0] && Time[1] == alarmTimes[i].time[1] && 
-        Time[3] == alarmTimes[i].time[3] && Time[4] == alarmTimes[i].time[4] && 
-        Time[6] == alarmTimes[i].time[6] && ( (1u << day) & alarmTimes[i].daysMask ) ) {
-          return true;
+bool timeToAlarm()
+{
+  for (int i = 0; i < alarmCount; i++)
+  {
+    if (Time[0] == alarmTimes[i].time[0] && Time[1] == alarmTimes[i].time[1] &&
+        Time[3] == alarmTimes[i].time[3] && Time[4] == alarmTimes[i].time[4] &&
+        Time[6] == alarmTimes[i].time[6] && ((1u << day) & alarmTimes[i].daysMask))
+    {
+      return true;
     }
   }
   return false;
 }
 
-
-void displayDayText() {
-  switch (day) {
-    case 1:  draw_text(0, 0, " SUNDAY  ", 1); break;
-    case 2:  draw_text(0, 0, " MONDAY  ", 1); break;
-    case 3:  draw_text(0, 0, " TUESDAY ", 1); break;
-    case 4:  draw_text(0, 0, "WEDNESDAY", 1); break;
-    case 5:  draw_text(0, 0, "THURSDAY ", 1); break;
-    case 6:  draw_text(0, 0, " FRIDAY  ", 1); break;
-    case 7:  draw_text(0, 0, "SATURDAY ", 1); break;
-    default: draw_text(0, 0, "**ERROR**", 1);
+void displayDayText()
+{
+  switch (day)
+  {
+  case 1:
+    draw_text(0, 0, " SUNDAY  ", 1);
+    break;
+  case 2:
+    draw_text(0, 0, " MONDAY  ", 1);
+    break;
+  case 3:
+    draw_text(0, 0, " TUESDAY ", 1);
+    break;
+  case 4:
+    draw_text(0, 0, "WEDNESDAY", 1);
+    break;
+  case 5:
+    draw_text(0, 0, "THURSDAY ", 1);
+    break;
+  case 6:
+    draw_text(0, 0, " FRIDAY  ", 1);
+    break;
+  case 7:
+    draw_text(0, 0, "SATURDAY ", 1);
+    break;
+  default:
+    draw_text(0, 0, "**ERROR**", 1);
   }
 }
 
-byte bcdToDecimal(byte value) {
+byte bcdToDecimal(byte value)
+{
   return (value >> 4) * 10 + (value & 0x0F);
 }
-byte decimalToBcd(byte value) {
-   return ((value / 10) << 4) + (value % 10);
+byte decimalToBcd(byte value)
+{
+  return ((value / 10) << 4) + (value % 10);
 }
 
-char onesDigit(byte val) {
+char onesDigit(byte val)
+{
   return val % 10 + 48;
 }
-char tensDigit(byte val) {
+char tensDigit(byte val)
+{
   return val / 10 + 48;
 }
 
-void convertTimeFromBcdToDecimal() {
+void convertTimeFromBcdToDecimal()
+{
   second = bcdToDecimal(second);
   minute = bcdToDecimal(minute);
-  hour   = bcdToDecimal(hour);
-  date   = bcdToDecimal(date);
-  month  = bcdToDecimal(month);
-  year   = bcdToDecimal(year);
+  hour = bcdToDecimal(hour);
+  date = bcdToDecimal(date);
+  month = bcdToDecimal(month);
+  year = bcdToDecimal(year);
 }
 
-void convertTimeFromDecimalToBcd(){
-    minute = decimalToBcd(minute);
-    hour = decimalToBcd(hour);
-    date = decimalToBcd(date);
-    month = decimalToBcd(month);
-    year = decimalToBcd(year);
+void convertTimeFromDecimalToBcd()
+{
+  minute = decimalToBcd(minute);
+  hour = decimalToBcd(hour);
+  date = decimalToBcd(date);
+  month = decimalToBcd(month);
+  year = decimalToBcd(year);
 }
 
-void DS3231_display() {
-  Time[7]     = onesDigit(second);
-  Time[6]     = tensDigit(second);
-  Time[4]     = onesDigit(minute);
-  Time[3]     = tensDigit(minute);
-  Time[1]     = onesDigit(hour);
-  Time[0]     = tensDigit(hour);
+void DS3231_display()
+{
+  Time[7] = onesDigit(second);
+  Time[6] = tensDigit(second);
+  Time[4] = onesDigit(minute);
+  Time[3] = tensDigit(minute);
+  Time[1] = onesDigit(hour);
+  Time[0] = tensDigit(hour);
   Calendar[9] = onesDigit(year);
   Calendar[8] = tensDigit(year);
-  Calendar[4] = onesDigit(month);
-  Calendar[3] = tensDigit(month);
-  Calendar[1] = onesDigit(date);
-  Calendar[0] = tensDigit(date);
-  if (temperature_msb < 0) {
+  Calendar[1] = onesDigit(month);
+  Calendar[0] = tensDigit(month);
+  Calendar[4] = onesDigit(date);
+  Calendar[3] = tensDigit(date);
+  if (temperature_msb < 0)
+  {
     temperature_msb = abs(temperature_msb);
     temperature[0] = '-';
   }
@@ -154,148 +182,172 @@ void DS3231_display() {
   temperature_lsb >>= 6;
   temperature[2] = onesDigit(temperature_msb);
   temperature[1] = tensDigit(temperature_msb);
-  if (temperature_lsb == 0 || temperature_lsb == 2) {
+  if (temperature_lsb == 0 || temperature_lsb == 2)
+  {
     temperature[5] = '0';
-    if (temperature_lsb == 0) temperature[4] = '0';
-    else                     temperature[4] = '5';
+    if (temperature_lsb == 0)
+      temperature[4] = '0';
+    else
+      temperature[4] = '5';
   }
-  if (temperature_lsb == 1 || temperature_lsb == 3) {
+  if (temperature_lsb == 1 || temperature_lsb == 3)
+  {
     temperature[5] = '5';
-    if (temperature_lsb == 1) temperature[4] = '2';
-    else                     temperature[4] = '7';
+    if (temperature_lsb == 1)
+      temperature[4] = '2';
+    else
+      temperature[4] = '7';
   }
 
-  draw_text(60,  0, Calendar, 1);                     // Display the date (format: dd/mm/yyyy)
-  draw_text(10, 24, Time, 2);                         // Display the time
-  draw_text(75, 55, temperature, 1);                  // Display the temperature
-
+  draw_text(60, 0, Calendar, 1);     // Display the date (format: dd/mm/yyyy)
+  draw_text(10, 24, Time, 2);        // Display the time
+  draw_text(75, 55, temperature, 1); // Display the temperature
 }
 
-void soundAlarm() {
-  if (timeToAlarm())  {
+void soundAlarm()
+{
+  if (timeToAlarm())
+  {
     digitalWrite(buzzer, LOW);
   }
-  else {
+  else
+  {
     digitalWrite(buzzer, HIGH);
   }
 }
 
-void blink_parameter() {
+void blink_parameter()
+{
   byte j = 0;
-  while (j < 10 && digitalRead(button1) && digitalRead(button2)) {
+  while (j < 10 && digitalRead(button1) && digitalRead(button2))
+  {
     j++;
     delay(25);
   }
 }
 
-byte edit(byte x_pos, byte y_pos, byte parameter) {
+byte edit(byte x_pos, byte y_pos, byte parameter)
+{
   char text[3];
   sprintf(text, "%02u", parameter);
-  while (!digitalRead(button1));                     // Wait until button B1 released
-  while (true) {
-    while (!digitalRead(button2)) {                  // If button B2 is pressed
+  while (!digitalRead(button1))
+    ; // Wait until button B1 released
+  while (true)
+  {
+    while (!digitalRead(button2))
+    { // If button B2 is pressed
       parameter++;
-      if (i == 0 && parameter > 31)                  // If date > 31 ==> date = 1
+      if (i == 0 && parameter > 31) // If date > 31 ==> date = 1
         parameter = 1;
-      if (i == 1 && parameter > 12)                  // If month > 12 ==> month = 1
+      if (i == 1 && parameter > 12) // If month > 12 ==> month = 1
         parameter = 1;
-      if (i == 2 && parameter > 99)                  // If year > 99 ==> year = 0
+      if (i == 2 && parameter > 99) // If year > 99 ==> year = 0
         parameter = 0;
-      if (i == 3 && parameter > 23)                  // If hours > 23 ==> hours = 0
+      if (i == 3 && parameter > 23) // If hours > 23 ==> hours = 0
         parameter = 0;
-      if (i == 4 && parameter > 59)                  // If minutes > 59 ==> minutes = 0
+      if (i == 4 && parameter > 59) // If minutes > 59 ==> minutes = 0
         parameter = 0;
       sprintf(text, "%02u", parameter);
       draw_text(x_pos, y_pos, text, 1);
-      delay(200);                                    // Wait 200ms
+      delay(200); // Wait 200ms
     }
     draw_text(x_pos, y_pos, "  ", 1);
     blink_parameter();
     draw_text(x_pos, y_pos, text, 1);
     blink_parameter();
-    if (!digitalRead(button1)) {                     // If button B1 is pressed
-      i++;                                           // Increament 'i' for the next parameter
-      return parameter;                              // Return parameter value and exit
+    if (!digitalRead(button1))
+    {                   // If button B1 is pressed
+      i++;              // Increament 'i' for the next parameter
+      return parameter; // Return parameter value and exit
     }
   }
 }
 
-void draw_text(byte x_pos, byte y_pos, char *text, byte text_size) {
+void draw_text(byte x_pos, byte y_pos, char *text, byte text_size)
+{
   display.setCursor(x_pos, y_pos);
   display.setTextSize(text_size);
   display.print(text);
   display.display();
 }
 
-void readBcdTimeFromClock() {
-  Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
-  Wire.write(0);                                // Send register address
-  Wire.endTransmission(false);                  // I2C restart
-  Wire.requestFrom(DS3231_ADDR, 7);                    // Request 7 bytes from DS3231 and release I2C bus at end of reading
-  second = Wire.read();                         // Read seconds from register 0
-  minute = Wire.read();                         // Read minuts from register 1
-  hour   = Wire.read();                         // Read hour from register 2
-  day    = Wire.read();                         // Read day from register 3
-  date   = Wire.read();                         // Read date from register 4
-  month  = Wire.read();                         // Read month from register 5
-  year   = Wire.read();                         // Read year from register 6
-  Wire.beginTransmission(DS3231_ADDR);                 // Start I2C protocol with DS3231 address
-  Wire.write(0x11);                             // Send register address
-  Wire.endTransmission(false);                  // I2C restart
-  Wire.requestFrom(DS3231_ADDR, 2);                    // Request 2 bytes from DS3231 and release I2C bus at end of reading
-  temperature_msb = Wire.read();                // Read temperature MSB
-  temperature_lsb = Wire.read();                // Read temperature LSB
+void readBcdTimeFromClock()
+{
+  Wire.beginTransmission(DS3231_ADDR); // Start I2C protocol with DS3231 address
+  Wire.write(0);                       // Send register address
+  Wire.endTransmission(false);         // I2C restart
+  Wire.requestFrom(DS3231_ADDR, 7);    // Request 7 bytes from DS3231 and release I2C bus at end of reading
+  second = Wire.read();                // Read seconds from register 0
+  minute = Wire.read();                // Read minuts from register 1
+  hour = Wire.read();                  // Read hour from register 2
+  day = Wire.read();                   // Read day from register 3
+  date = Wire.read();                  // Read date from register 4
+  month = Wire.read();                 // Read month from register 5
+  year = Wire.read();                  // Read year from register 6
+  Wire.beginTransmission(DS3231_ADDR); // Start I2C protocol with DS3231 address
+  Wire.write(0x11);                    // Send register address
+  Wire.endTransmission(false);         // I2C restart
+  Wire.requestFrom(DS3231_ADDR, 2);    // Request 2 bytes from DS3231 and release I2C bus at end of reading
+  temperature_msb = Wire.read();       // Read temperature MSB
+  temperature_lsb = Wire.read();       // Read temperature LSB
 }
 
-void updateClockWithBcdTime() {
+void updateClockWithBcdTime()
+{
   // Write data to DS3231 RTC
-  Wire.beginTransmission(DS3231_ADDR);               // Start I2C protocol with DS3231 address
-  Wire.write(0);                              // Send register address
-  Wire.write(0);                              // Reset sesonds and start oscillator
-  Wire.write(minute);                         // Write minute
-  Wire.write(hour);                           // Write hour
-  Wire.write(day);                            // Write day
-  Wire.write(date);                           // Write date
-  Wire.write(month);                          // Write month
-  Wire.write(year);                           // Write year
-  Wire.endTransmission();                     // Stop transmission and release the I2C bus
+  Wire.beginTransmission(DS3231_ADDR); // Start I2C protocol with DS3231 address
+  Wire.write(0);                       // Send register address
+  Wire.write(0);                       // Reset sesonds and start oscillator
+  Wire.write(minute);                  // Write minute
+  Wire.write(hour);                    // Write hour
+  Wire.write(day);                     // Write day
+  Wire.write(date);                    // Write date
+  Wire.write(month);                   // Write month
+  Wire.write(year);                    // Write year
+  Wire.endTransmission();              // Stop transmission and release the I2C bus
 }
 
-void loop() {
+void loop()
+{
 
-  if (!digitalRead(button1)) {                       // If button B1 is pressed
+  if (!digitalRead(button1))
+  { // If button B1 is pressed
     i = 0;
-    while (!digitalRead(button1));                   // Wait for button B1 release
-    while (true) {
-      while (!digitalRead(button2)) {                // While button B2 pressed
-        day++;                                       // Increment day
-        if (day > 7) day = 1;
-        displayDayText();                               // Call display_day function
-        delay(200);                                  // Wait 200 ms
+    while (!digitalRead(button1))
+      ; // Wait for button B1 release
+    while (true)
+    {
+      while (!digitalRead(button2))
+      {        // While button B2 pressed
+        day++; // Increment day
+        if (day > 7)
+          day = 1;
+        displayDayText(); // Call display_day function
+        delay(200);       // Wait 200 ms
       }
       draw_text(0, 0, "         ", 1);
-      blink_parameter();                             // Call blink_parameter function
-      displayDayText();                                 // Call display_day function
-      blink_parameter();                             // Call blink_parameter function
-      if (!digitalRead(button1))                     // If button B1 is pressed
+      blink_parameter();         // Call blink_parameter function
+      displayDayText();          // Call display_day function
+      blink_parameter();         // Call blink_parameter function
+      if (!digitalRead(button1)) // If button B1 is pressed
         break;
     }
     //set position of text when editing on button press
-    date   = edit(60, 0, date);                      // Edit date
-    month  = edit(80, 0, month);                    // Edit month
-    year   = edit(110, 0, year);                   // Edit year
-    hour   = edit(14, 9, hour);                     // Edit hours
-    minute = edit(50, 9, minute);                   // Edit minutes
+    date = edit(60, 0, date);     // Edit date
+    month = edit(80, 0, month);   // Edit month
+    year = edit(110, 0, year);    // Edit year
+    hour = edit(14, 9, hour);     // Edit hours
+    minute = edit(50, 9, minute); // Edit minutes
 
     convertTimeFromDecimalToBcd();
     updateClockWithBcdTime();
-    delay(200);                                 // Wait 200ms
+    delay(200); // Wait 200ms
   }
 
-  readBcdTimeFromClock();                                 // read date and time
+  readBcdTimeFromClock(); // read date and time
   convertTimeFromBcdToDecimal();
   displayDayText();
-  DS3231_display();                             // Display time & calendar
+  DS3231_display(); // Display time & calendar
   soundAlarm();
-  delay(50);                                    // Wait 50ms
+  delay(50); // Wait 50ms
 }
